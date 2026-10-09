@@ -1,0 +1,17 @@
+﻿node_modules/
+dist/
+coverage/
+
+.aic/private/
+.aic/secrets/
+.aic/tmp/
+
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+
+.DS_Store
+Thumbs.db
