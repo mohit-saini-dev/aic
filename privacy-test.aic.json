@@ -1,0 +1,22 @@
+{
+  "format": "aic-context-package",
+  "formatVersion": "1.0",
+  "createdAt": "2026-10-13T18:23:17.018Z",
+  "source": {
+    "tool": "aic",
+    "protocolVersion": "0.1"
+  },
+  "context": {
+    "project": {
+      "name": "PrivacyTestProject",
+      "objective": "Verify memory isolation",
+      "status": "planned"
+    },
+    "currentTask": null,
+    "decisions": [],
+    "issues": [],
+    "relevantFiles": [],
+    "constraints": [],
+    "failedAttempts": []
+  }
+}

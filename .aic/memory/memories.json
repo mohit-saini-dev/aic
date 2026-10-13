@@ -1,0 +1,13 @@
+[
+  {
+    "schemaVersion": "1.0",
+    "id": "6cdfb8b2-d408-40d0-a95b-258b8837cede",
+    "category": "preference",
+    "content": "Super secret user credential pattern or preference",
+    "status": "active",
+    "source": "user_provided",
+    "createdAt": "2026-10-13T18:23:00.745Z",
+    "updatedAt": "2026-10-13T18:23:00.745Z",
+    "expiresAt": null
+  }
+]

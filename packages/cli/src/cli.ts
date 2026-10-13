@@ -7,8 +7,17 @@ import {
   readState,
   exportContextPackage,
   inspectContextPackage,
-  importContextPackage
+  importContextPackage,
+  createMemory,
+  getMemory,
+  listMemories,
+  updateMemory,
+  archiveMemory,
+  deleteMemory
 } from "@aic/core";
+
+import readline from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
 
 function printHelp(): void {
   console.log(`
@@ -19,9 +28,15 @@ Usage:
   aic status
   aic snapshot
   aic context
-  aic export [output-file]          Export project context to JSON
+  aic export [output-file]           Export project context to JSON
   aic inspect <context-package-file> Validate and summarize a context package
   aic import <context-package-file>  Import context into an empty AIC project
+  aic memory add <content> [--category <cat>] [--expires <date>]
+  aic memory list [--category <cat>] [--status <status>]
+  aic memory show <id>
+  aic memory edit <id> [--content <text>] [--category <cat>] [--status <status>]
+  aic memory archive <id>
+  aic memory delete <id>
   aic help
 `);
 }
@@ -125,7 +140,156 @@ function runImport(args: string[]): void {
   console.log(`State: ${statePath}`);
 }
 
-function main(): void {
+async function runMemory(args: string[]): Promise<void> {
+  const subcommand = args[0];
+  const subArgs = args.slice(1);
+  const root = process.cwd();
+
+  switch (subcommand) {
+    case "add": {
+      let content: string | undefined;
+      let category = "user_fact";
+      let expiresAt: string | null = null;
+
+      for (let i = 0; i < subArgs.length; i++) {
+        if (subArgs[i] === "--category" && subArgs[i + 1]) {
+          category = subArgs[i + 1];
+          i++;
+        } else if (subArgs[i] === "--expires" && subArgs[i + 1]) {
+          expiresAt = subArgs[i + 1];
+          i++;
+        } else if (!content && !subArgs[i].startsWith("-")) {
+          content = subArgs[i];
+        }
+      }
+
+      if (!content) {
+        throw new Error("Usage: aic memory add <content> [--category <cat>] [--expires <date>]");
+      }
+
+      const memory = await createMemory(root, { category, content, expiresAt });
+      console.log("Memory created successfully.");
+      console.log(`ID: ${memory.id}`);
+      console.log(`Category: ${memory.category}`);
+      console.log(`Content: ${memory.content}`);
+      break;
+    }
+    case "list": {
+      let category: string | undefined;
+      let status: string | undefined;
+
+      for (let i = 0; i < subArgs.length; i++) {
+        if (subArgs[i] === "--category" && subArgs[i + 1]) {
+          category = subArgs[i + 1];
+          i++;
+        } else if (subArgs[i] === "--status" && subArgs[i + 1]) {
+          status = subArgs[i + 1];
+          i++;
+        }
+      }
+
+      const memories = await listMemories(root, { category, status });
+      if (memories.length === 0) {
+        console.log("No memories found.");
+        return;
+      }
+
+      console.log(`Found ${memories.length} memories:`);
+      for (const m of memories) {
+        console.log(`- [${m.id}] (${m.category} / ${m.status}) ${m.content}`);
+      }
+      break;
+    }
+    case "show": {
+      const id = subArgs[0];
+      if (!id) {
+        throw new Error("Usage: aic memory show <id>");
+      }
+
+      const memory = await getMemory(root, id);
+      if (!memory) {
+        console.log(`Memory with ID "${id}" not found.`);
+        process.exitCode = 1;
+        return;
+      }
+
+      console.log(JSON.stringify(memory, null, 2));
+      break;
+    }
+    case "edit": {
+      const id = subArgs[0];
+      if (!id) {
+        throw new Error("Usage: aic memory edit <id> [--content <text>] [--category <cat>] [--status <status>]");
+      }
+
+      let content: string | undefined;
+      let category: string | undefined;
+      let status: string | undefined;
+      let expiresAt: string | null | undefined = undefined;
+
+      for (let i = 1; i < subArgs.length; i++) {
+        if (subArgs[i] === "--content" && subArgs[i + 1]) {
+          content = subArgs[i + 1];
+          i++;
+        } else if (subArgs[i] === "--category" && subArgs[i + 1]) {
+          category = subArgs[i + 1];
+          i++;
+        } else if (subArgs[i] === "--status" && subArgs[i + 1]) {
+          status = subArgs[i + 1];
+          i++;
+        } else if (subArgs[i] === "--expires" && subArgs[i + 1]) {
+          expiresAt = subArgs[i + 1];
+          i++;
+        }
+      }
+
+      const updated = await updateMemory(root, id, { content, category, status, expiresAt });
+      console.log("Memory updated successfully.");
+      console.log(JSON.stringify(updated, null, 2));
+      break;
+    }
+    case "archive": {
+      const id = subArgs[0];
+      if (!id) {
+        throw new Error("Usage: aic memory archive <id>");
+      }
+
+      const archived = await archiveMemory(root, id);
+      console.log(`Memory ${archived.id} archived successfully.`);
+      break;
+    }
+    case "delete": {
+      const id = subArgs[0];
+      if (!id) {
+        throw new Error("Usage: aic memory delete <id>");
+      }
+
+      const rl = readline.createInterface({ input, output });
+      const answer = await rl.question(`Are you sure you want to permanently delete memory ${id}? (y/N): `);
+      rl.close();
+
+      if (answer.trim().toLowerCase() !== "y") {
+        console.log("Deletion cancelled.");
+        return;
+      }
+
+      const success = await deleteMemory(root, id);
+      if (success) {
+        console.log("Memory permanently deleted.");
+      } else {
+        console.log(`Memory with ID "${id}" not found.`);
+        process.exitCode = 1;
+      }
+      break;
+    }
+    default:
+      console.error(`Unknown memory subcommand: ${subcommand}`);
+      printHelp();
+      process.exitCode = 1;
+  }
+}
+
+async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
 
@@ -151,6 +315,9 @@ function main(): void {
         break;
       case "import":
         runImport(args.slice(1));
+        break;
+      case "memory":
+        await runMemory(args.slice(1));
         break;
       case "help":
       case "--help":
