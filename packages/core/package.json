@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "@aic/core",
   "version": "0.1.0",
   "private": true,
@@ -19,5 +19,8 @@
   },
   "dependencies": {
     "@aic/protocol": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5"
   }
 }

@@ -1,10 +1,5 @@
-﻿import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync
-} from "node:fs";
-import path from "node:path";
+﻿import * as fs from "node:fs";
+import * as path from "node:path";
 import type { AicWorkState } from "@aic/protocol";
 import { assertValidWorkState } from "./validation.js";
 
@@ -39,7 +34,7 @@ export function getStatus(root: string): ProjectStatus {
   const absoluteRoot = path.resolve(root);
   const stateFile = getStateFilePath(absoluteRoot);
 
-  if (!existsSync(stateFile)) {
+  if (!fs.existsSync(stateFile)) {
     return {
       initialized: false,
       root: absoluteRoot,
@@ -48,7 +43,7 @@ export function getStatus(root: string): ProjectStatus {
   }
 
   try {
-    const raw = readFileSync(stateFile, "utf8");
+    const raw = fs.readFileSync(stateFile, "utf8");
     const state: unknown = JSON.parse(raw);
     assertValidWorkState(state);
 
@@ -76,7 +71,7 @@ export function initProject(root: string, options: InitOptions = {}): AicWorkSta
   }
 
   const aicDirectory = getAicDirectory(absoluteRoot);
-  mkdirSync(aicDirectory, { recursive: true });
+  fs.mkdirSync(aicDirectory, { recursive: true });
 
   const now = new Date().toISOString();
   const state: AicWorkState = {
@@ -98,7 +93,7 @@ export function initProject(root: string, options: InitOptions = {}): AicWorkSta
 
   assertValidWorkState(state);
 
-  writeFileSync(
+  fs.writeFileSync(
     getStateFilePath(absoluteRoot),
     JSON.stringify(state, null, 2) + "\n",
     "utf8"
@@ -115,7 +110,7 @@ export function readState(root: string): AicWorkState {
     throw new Error(`AIC is not initialized in ${absoluteRoot}`);
   }
 
-  const raw = readFileSync(status.stateFile, "utf8");
+  const raw = fs.readFileSync(status.stateFile, "utf8");
   const state: unknown = JSON.parse(raw);
 
   assertValidWorkState(state);
@@ -133,7 +128,7 @@ export function createSnapshot(root: string): string {
     SNAPSHOT_DIRECTORY
   );
 
-  mkdirSync(snapshotDirectory, { recursive: true });
+  fs.mkdirSync(snapshotDirectory, { recursive: true });
 
   const timestamp = new Date()
     .toISOString()
@@ -148,7 +143,7 @@ export function createSnapshot(root: string): string {
     );
 
     try {
-      writeFileSync(
+      fs.writeFileSync(
         snapshotPath,
         JSON.stringify(state, null, 2) + "\n",
         { encoding: "utf8", flag: "wx" }
@@ -186,3 +181,12 @@ export {
   readMemories,
   writeMemories
 } from "./memory-storage.js";
+
+export {
+  createMemory,
+  getMemory,
+  listMemories,
+  updateMemory,
+  archiveMemory,
+  deleteMemory
+} from "./memory-service.js";
