@@ -181,3 +181,8 @@ export {
   importContextPackage,
   validateContextPackage
 } from "./context-package.js";
+
+export {
+  readMemories,
+  writeMemories
+} from "./memory-storage.js";

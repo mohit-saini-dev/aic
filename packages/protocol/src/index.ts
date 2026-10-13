@@ -58,3 +58,17 @@ export {
 export type {
   AicContextPackage
 } from "./context-package.js";
+
+export {
+  AIC_MEMORY_VERSION,
+  MEMORY_CATEGORIES,
+  validateAicMemory
+} from "./memory.js";
+
+export type {
+  AicMemory,
+  MemoryCategory,
+  MemorySource,
+  MemoryStatus,
+  MemoryValidationResult
+} from "./memory.js";
