@@ -13,11 +13,21 @@ import {
   listMemories,
   updateMemory,
   archiveMemory,
-  deleteMemory
+  deleteMemory,
+  updateProjectDetails,
+  setCurrentTask,
+  clearCurrentTask,
+  addDecision,
+  addIssue,
+  addRelevantFile,
+  removeRelevantFile,
+  addConstraint,
+  addFailedAttempt
 } from "@aic/core";
 
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import type { ProjectStatus, TaskStatus } from "@aic/protocol";
 
 function printHelp(): void {
   console.log(`
@@ -28,9 +38,18 @@ Usage:
   aic status
   aic snapshot
   aic context
-  aic export [output-file]           Export project context to JSON
+  aic export [output-file]                  Export project context to JSON
   aic inspect <context-package-file> Validate and summarize a context package
-  aic import <context-package-file>  Import context into an empty AIC project
+  aic import <context-package-file>   Import context into an empty AIC project
+  aic project set [--name <name>] [--objective <objective>] [--status <status>]
+  aic task set <title> [--status <status>]
+  aic task clear
+  aic decision add <title> --decision <text> [--reason <text>]
+  aic issue add <title> --description <text> [--status <status>]
+  aic file add <path>
+  aic file remove <path>
+  aic constraint add <text>
+  aic attempt add <text>
   aic memory add <content> [--category <cat>] [--expires <date>]
   aic memory list [--category <cat>] [--status <status>]
   aic memory show <id>
@@ -72,7 +91,7 @@ function runStatus(): void {
   const state = readState(process.cwd());
   console.log(`Project: ${state.project.name}`);
   console.log(`Objective: ${state.project.objective}`);
-  console.log(`Current task: ${state.currentTask ?? "(none)"}`);
+  console.log(`Current task: ${state.currentTask ? state.currentTask.title + " (" + state.currentTask.status + ")" : "(none)"}`);
   console.log(`Decisions: ${state.decisions.length}`);
   console.log(`Issues: ${state.issues.length}`);
   console.log(`Relevant files: ${state.relevantFiles.length}`);
@@ -138,6 +157,190 @@ function runImport(args: string[]): void {
 
   console.log("AIC context package imported successfully.");
   console.log(`State: ${statePath}`);
+}
+
+function runProject(args: string[]): void {
+  const subcommand = args[0];
+  const subArgs = args.slice(1);
+  const root = process.cwd();
+
+  if (subcommand !== "set") {
+    throw new Error("Usage: aic project set [--name <name>] [--objective <obj>] [--status <status>]");
+  }
+
+  let name: string | undefined;
+  let objective: string | undefined;
+  let status: ProjectStatus | undefined;
+
+  for (let i = 0; i < subArgs.length; i++) {
+    if (subArgs[i] === "--name" && subArgs[i + 1]) {
+      name = subArgs[i + 1];
+      i++;
+    } else if (subArgs[i] === "--objective" && subArgs[i + 1]) {
+      objective = subArgs[i + 1];
+      i++;
+    } else if (subArgs[i] === "--status" && subArgs[i + 1]) {
+      status = subArgs[i + 1] as ProjectStatus;
+      i++;
+    }
+  }
+
+  const updated = updateProjectDetails(root, { name, objective, status });
+  console.log("Project details updated successfully.");
+  console.log(`Project: ${updated.project.name}`);
+  console.log(`Objective: ${updated.project.objective}`);
+  console.log(`Status: ${updated.project.status}`);
+}
+
+function runTask(args: string[]): void {
+  const subcommand = args[0];
+  const subArgs = args.slice(1);
+  const root = process.cwd();
+
+  if (subcommand === "set") {
+    let title: string | undefined;
+    let status: TaskStatus = "in_progress";
+
+    for (let i = 0; i < subArgs.length; i++) {
+      if (subArgs[i] === "--status" && subArgs[i + 1]) {
+        status = subArgs[i + 1] as TaskStatus;
+        i++;
+      } else if (!title && !subArgs[i].startsWith("-")) {
+        title = subArgs[i];
+      }
+    }
+
+    if (!title) {
+      throw new Error("Usage: aic task set <title> [--status <status>]");
+    }
+
+    const updated = setCurrentTask(root, { title, status });
+    console.log("Current task set successfully.");
+    console.log(`Task: ${updated.currentTask?.title} (${updated.currentTask?.status})`);
+  } else if (subcommand === "clear") {
+    const updated = clearCurrentTask(root);
+    console.log("Current task cleared.");
+  } else {
+    throw new Error("Usage: aic task set <title> [--status <status>] OR aic task clear");
+  }
+}
+
+function runDecision(args: string[]): void {
+  const subcommand = args[0];
+  const subArgs = args.slice(1);
+  const root = process.cwd();
+
+  if (subcommand !== "add") {
+    throw new Error("Usage: aic decision add <title> --decision <text> [--reason <text>]");
+  }
+
+  let title: string | undefined;
+  let decisionText: string | undefined;
+  let reason: string | undefined;
+
+  for (let i = 0; i < subArgs.length; i++) {
+    if (subArgs[i] === "--decision" && subArgs[i + 1]) {
+      decisionText = subArgs[i + 1];
+      i++;
+    } else if (subArgs[i] === "--reason" && subArgs[i + 1]) {
+      reason = subArgs[i + 1];
+      i++;
+    } else if (!title && !subArgs[i].startsWith("-")) {
+      title = subArgs[i];
+    }
+  }
+
+  if (!title || !decisionText) {
+    throw new Error("Usage: aic decision add <title> --decision <text> [--reason <text>]");
+  }
+
+  const updated = addDecision(root, { title, decision: decisionText, reason });
+  console.log("Decision recorded successfully.");
+  console.log(`Total decisions: ${updated.decisions.length}`);
+}
+
+function runIssue(args: string[]): void {
+  const subcommand = args[0];
+  const subArgs = args.slice(1);
+  const root = process.cwd();
+
+  if (subcommand !== "add") {
+    throw new Error("Usage: aic issue add <title> --description <text> [--status <status>]");
+  }
+
+  let title: string | undefined;
+  let description: string | undefined;
+  let status: "open" | "resolved" = "open";
+
+  for (let i = 0; i < subArgs.length; i++) {
+    if (subArgs[i] === "--description" && subArgs[i + 1]) {
+      description = subArgs[i + 1];
+      i++;
+    } else if (subArgs[i] === "--status" && subArgs[i + 1]) {
+      status = subArgs[i + 1] as "open" | "resolved";
+      i++;
+    } else if (!title && !subArgs[i].startsWith("-")) {
+      title = subArgs[i];
+    }
+  }
+
+  if (!title || !description) {
+    throw new Error("Usage: aic issue add <title> --description <text> [--status <status>]");
+  }
+
+  const updated = addIssue(root, { title, description, status });
+  console.log("Issue tracked successfully.");
+  console.log(`Total issues: ${updated.issues.length}`);
+}
+
+function runFile(args: string[]): void {
+  const subcommand = args[0];
+  const filePath = args[1];
+  const root = process.cwd();
+
+  if (!filePath) {
+    throw new Error("Usage: aic file add <path> OR aic file remove <path>");
+  }
+
+  if (subcommand === "add") {
+    const updated = addRelevantFile(root, filePath);
+    console.log(`Relevant file added: ${filePath}`);
+    console.log(`Total relevant files: ${updated.relevantFiles.length}`);
+  } else if (subcommand === "remove") {
+    const updated = removeRelevantFile(root, filePath);
+    console.log(`Relevant file removed: ${filePath}`);
+    console.log(`Total relevant files: ${updated.relevantFiles.length}`);
+  } else {
+    throw new Error("Usage: aic file add <path> OR aic file remove <path>");
+  }
+}
+
+function runConstraint(args: string[]): void {
+  const subcommand = args[0];
+  const constraintText = args[1];
+  const root = process.cwd();
+
+  if (subcommand !== "add" || !constraintText) {
+    throw new Error("Usage: aic constraint add <text>");
+  }
+
+  const updated = addConstraint(root, constraintText);
+  console.log("Constraint added successfully.");
+  console.log(`Total constraints: ${updated.constraints.length}`);
+}
+
+function runAttempt(args: string[]): void {
+  const subcommand = args[0];
+  const attemptText = args[1];
+  const root = process.cwd();
+
+  if (subcommand !== "add" || !attemptText) {
+    throw new Error("Usage: aic attempt add <text>");
+  }
+
+  const updated = addFailedAttempt(root, attemptText);
+  console.log("Failed attempt recorded successfully.");
+  console.log(`Total failed attempts: ${updated.failedAttempts.length}`);
 }
 
 async function runMemory(args: string[]): Promise<void> {
@@ -315,6 +518,27 @@ async function main(): Promise<void> {
         break;
       case "import":
         runImport(args.slice(1));
+        break;
+      case "project":
+        runProject(args.slice(1));
+        break;
+      case "task":
+        runTask(args.slice(1));
+        break;
+      case "decision":
+        runDecision(args.slice(1));
+        break;
+      case "issue":
+        runIssue(args.slice(1));
+        break;
+      case "file":
+        runFile(args.slice(1));
+        break;
+      case "constraint":
+        runConstraint(args.slice(1));
+        break;
+      case "attempt":
+        runAttempt(args.slice(1));
         break;
       case "memory":
         await runMemory(args.slice(1));

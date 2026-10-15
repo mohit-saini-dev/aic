@@ -190,3 +190,15 @@ export {
   archiveMemory,
   deleteMemory
 } from "./memory-service.js";
+
+export {
+  updateProjectDetails,
+  setCurrentTask,
+  clearCurrentTask,
+  addDecision,
+  addIssue,
+  addRelevantFile,
+  removeRelevantFile,
+  addConstraint,
+  addFailedAttempt
+} from "./state-service.js";
