@@ -22,3 +22,30 @@ export interface AicContextPackage {
     failedAttempts: string[];
   };
 }
+
+export type IngestionItemAction = "add" | "update" | "skip" | "conflict" | "reject";
+
+export interface IngestionChangeRecord {
+  id?: string;
+  type: "project" | "task" | "decision" | "issue" | "file" | "constraint" | "attempt";
+  action: IngestionItemAction;
+  summary: string;
+  reason?: string;
+}
+
+export interface IngestionPreview {
+  valid: boolean;
+  format: string;
+  version: string;
+  stateHashBefore: string;
+  summary: {
+    totalItems: number;
+    toAdd: number;
+    toUpdate: number;
+    toSkip: number;
+    conflicts: number;
+    rejected: number;
+  };
+  changes: IngestionChangeRecord[];
+  securityAlerts: string[];
+}

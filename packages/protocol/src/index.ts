@@ -56,7 +56,10 @@ export {
 } from "./context-package.js";
 
 export type {
-  AicContextPackage
+  AicContextPackage,
+  IngestionItemAction,
+  IngestionChangeRecord,
+  IngestionPreview
 } from "./context-package.js";
 
 export {

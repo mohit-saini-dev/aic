@@ -8,6 +8,8 @@ import {
   exportContextPackage,
   inspectContextPackage,
   importContextPackage,
+  previewIngestion,
+  applyIngestion,
   createMemory,
   getMemory,
   listMemories,
@@ -40,14 +42,15 @@ Usage:
   aic init [--name <name>] [--objective <objective>]
   aic status
   aic snapshot
-  aic context                                 Display raw project state JSON
-  aic context compile [options]               Compile task-specific context
-    --include-memories                       Opt-in to include personal memories
-    --max-chars <number>                      Set context character budget limit
-    --out <file>                             Save compiled context to a file
-  aic export [output-file]                    Export project context to JSON
-  aic inspect <context-package-file>          Validate and summarize a context package
-  aic import <context-package-file>           Import context into an empty AIC project
+  aic context                                         Display raw project state JSON
+  aic context compile [options]                       Compile task-specific context
+    --include-memories                                Opt-in to include personal memories
+    --max-chars <number>                              Set context character budget limit
+    --out <file>                                      Save compiled context to a file
+  aic export [output-file]                            Export project context to JSON
+  aic inspect <context-package-file>                  Validate and summarize a context package
+  aic import <context-package-file>                   Import context into an empty AIC project
+  aic ingest <package-file> [--apply]                 Preview or apply secure context ingestion
   aic project set [--name <name>] [--objective <objective>] [--status <status>]
   aic task set <title> [--status <status>]
   aic task clear
@@ -189,6 +192,60 @@ function runImport(args: string[]): void {
 
   console.log("AIC context package imported successfully.");
   console.log(`State: ${statePath}`);
+}
+
+function runIngest(args: string[]): void {
+  let packagePath: string | undefined;
+  let applyMode = false;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--apply") {
+      applyMode = true;
+    } else if (!packagePath && !args[i].startsWith("-")) {
+      packagePath = args[i];
+    }
+  }
+
+  if (!packagePath) {
+    throw new Error("Usage: aic ingest <package-file> [--apply]");
+  }
+
+  const root = process.cwd();
+  console.log(`Analyzing ingestion package: ${packagePath}...\n`);
+
+  const preview = previewIngestion(root, packagePath);
+
+  console.log("=== Ingestion Preview ===");
+  console.log(`Valid: ${preview.valid}`);
+  console.log(`Format: ${preview.format} (v${preview.version})`);
+  console.log(`Security Alerts: ${preview.securityAlerts.length > 0 ? preview.securityAlerts.join(", ") : "None"}`);
+  console.log("\nSummary:");
+  console.log(`- Total Items: ${preview.summary.totalItems}`);
+  console.log(`- To Add: ${preview.summary.toAdd}`);
+  console.log(`- To Skip: ${preview.summary.toSkip}`);
+  console.log(`- Conflicts: ${preview.summary.conflicts}`);
+  console.log(`- Rejected: ${preview.summary.rejected}`);
+
+  if (preview.changes.length > 0) {
+    console.log("\nProposed Changes:");
+    for (const change of preview.changes) {
+      console.log(`  [${change.action.toUpperCase()}] (${change.type}) ${change.summary}`);
+    }
+  }
+
+  if (!applyMode) {
+    console.log("\n[Dry-Run Mode] No project state files were modified.");
+    console.log("Run with `--apply` to commit these approved changes.");
+    return;
+  }
+
+  if (!preview.valid) {
+    throw new Error("Cannot apply ingestion: Preview failed validation or contained conflicts/security alerts.");
+  }
+
+  const updatedState = applyIngestion(root, packagePath, preview);
+  console.log("\n✅ Ingestion applied successfully!");
+  console.log(`Project Updated: ${updatedState.project.name} (Decisions: ${updatedState.decisions.length}, Constraints: ${updatedState.constraints.length})`);
 }
 
 function runProject(args: string[]): void {
@@ -552,6 +609,9 @@ async function main(): Promise<void> {
         break;
       case "import":
         runImport(args.slice(1));
+        break;
+      case "ingest":
+        runIngest(args.slice(1));
         break;
       case "project":
         runProject(args.slice(1));

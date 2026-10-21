@@ -212,3 +212,8 @@ export type {
   ProvenanceRecord,
   CompiledContext
 } from "./context-compiler.js";
+
+export {
+  previewIngestion,
+  applyIngestion
+} from "./context-ingestion.js";

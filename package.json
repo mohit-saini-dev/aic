@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
+    "build": "npm run build --workspace=@aic/protocol && npm run build --workspace=@aic/core && npm run build --workspace=@aic/cli && npm run build --workspace=@aic/mcp && npm run build --workspace=@aic/bridge",
     "typecheck": "npm run typecheck --workspaces",
     "test": "npm run test --workspaces"
   },
