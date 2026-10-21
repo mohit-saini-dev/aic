@@ -202,3 +202,13 @@ export {
   addConstraint,
   addFailedAttempt
 } from "./state-service.js";
+
+export {
+  compileContext
+} from "./context-compiler.js";
+
+export type {
+  CompilationOptions,
+  ProvenanceRecord,
+  CompiledContext
+} from "./context-compiler.js";

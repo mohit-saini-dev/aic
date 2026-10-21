@@ -22,9 +22,12 @@ import {
   addRelevantFile,
   removeRelevantFile,
   addConstraint,
-  addFailedAttempt
+  addFailedAttempt,
+  compileContext
 } from "@aic/core";
 
+import fs from "node:fs";
+import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type { ProjectStatus, TaskStatus } from "@aic/protocol";
@@ -37,10 +40,14 @@ Usage:
   aic init [--name <name>] [--objective <objective>]
   aic status
   aic snapshot
-  aic context
-  aic export [output-file]                  Export project context to JSON
-  aic inspect <context-package-file> Validate and summarize a context package
-  aic import <context-package-file>   Import context into an empty AIC project
+  aic context                                 Display raw project state JSON
+  aic context compile [options]               Compile task-specific context
+    --include-memories                       Opt-in to include personal memories
+    --max-chars <number>                      Set context character budget limit
+    --out <file>                             Save compiled context to a file
+  aic export [output-file]                    Export project context to JSON
+  aic inspect <context-package-file>          Validate and summarize a context package
+  aic import <context-package-file>           Import context into an empty AIC project
   aic project set [--name <name>] [--objective <objective>] [--status <status>]
   aic task set <title> [--status <status>]
   aic task clear
@@ -102,7 +109,44 @@ function runSnapshot(): void {
   console.log(`Snapshot created at: ${snapshotPath}`);
 }
 
-function runContext(): void {
+async function runContext(args: string[]): Promise<void> {
+  const subcommand = args[0];
+
+  if (subcommand === "compile") {
+    const subArgs = args.slice(1);
+    let includeMemories = false;
+    let maxCharacters: number | undefined;
+    let outFile: string | undefined;
+
+    for (let i = 0; i < subArgs.length; i++) {
+      if (subArgs[i] === "--include-memories") {
+        includeMemories = true;
+      } else if (subArgs[i] === "--max-chars" && subArgs[i + 1]) {
+        maxCharacters = parseInt(subArgs[i + 1], 10);
+        i++;
+      } else if (subArgs[i] === "--out" && subArgs[i + 1]) {
+        outFile = subArgs[i + 1];
+        i++;
+      }
+    }
+
+    const compiled = await compileContext(process.cwd(), {
+      includeMemories,
+      maxCharacters
+    });
+
+    const outputJson = JSON.stringify(compiled, null, 2);
+
+    if (outFile) {
+      const outputPath = path.resolve(process.cwd(), outFile);
+      fs.writeFileSync(outputPath, outputJson + "\n", "utf8");
+      console.log(`Compiled context written to: ${outputPath}`);
+    } else {
+      console.log(outputJson);
+    }
+    return;
+  }
+
   const state = readState(process.cwd());
   console.log(JSON.stringify(state, null, 2));
 }
@@ -111,15 +155,10 @@ function runExport(args: string[]): void {
   const outputFile = args[0] ?? "handoff.aic.json";
 
   if (args.length > 1) {
-    throw new Error(
-      "Usage: aic export [output-file]"
-    );
+    throw new Error("Usage: aic export [output-file]");
   }
 
-  const outputPath = exportContextPackage(
-    process.cwd(),
-    outputFile
-  );
+  const outputPath = exportContextPackage(process.cwd(), outputFile);
 
   console.log("AIC context package exported successfully.");
   console.log(`File: ${outputPath}`);
@@ -127,9 +166,7 @@ function runExport(args: string[]): void {
 
 function runInspect(args: string[]): void {
   if (args.length !== 1) {
-    throw new Error(
-      "Usage: aic inspect <context-package-file>"
-    );
+    throw new Error("Usage: aic inspect <context-package-file>");
   }
 
   const contextPackage = inspectContextPackage(args[0]);
@@ -145,15 +182,10 @@ function runInspect(args: string[]): void {
 
 function runImport(args: string[]): void {
   if (args.length !== 1) {
-    throw new Error(
-      "Usage: aic import <context-package-file>"
-    );
+    throw new Error("Usage: aic import <context-package-file>");
   }
 
-  const statePath = importContextPackage(
-    args[0],
-    process.cwd()
-  );
+  const statePath = importContextPackage(args[0], process.cwd());
 
   console.log("AIC context package imported successfully.");
   console.log(`State: ${statePath}`);
@@ -218,7 +250,7 @@ function runTask(args: string[]): void {
     console.log("Current task set successfully.");
     console.log(`Task: ${updated.currentTask?.title} (${updated.currentTask?.status})`);
   } else if (subcommand === "clear") {
-    const updated = clearCurrentTask(root);
+    clearCurrentTask(root);
     console.log("Current task cleared.");
   } else {
     throw new Error("Usage: aic task set <title> [--status <status>] OR aic task clear");
@@ -485,10 +517,12 @@ async function runMemory(args: string[]): Promise<void> {
       }
       break;
     }
-    default:
+    default: {
       console.error(`Unknown memory subcommand: ${subcommand}`);
       printHelp();
       process.exitCode = 1;
+      break;
+    }
   }
 }
 
@@ -508,7 +542,7 @@ async function main(): Promise<void> {
         runSnapshot();
         break;
       case "context":
-        runContext();
+        await runContext(args.slice(1));
         break;
       case "export":
         runExport(args.slice(1));
