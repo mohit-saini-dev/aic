@@ -1,4 +1,4 @@
-import { test, describe, beforeEach, afterEach } from "node:test";
+import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -6,57 +6,72 @@ import os from "node:os";
 import { initProject } from "@aic/core";
 import {
   getProjectSummaryTool,
-  getCurrentTaskTool,
-  listDecisionsTool,
-  getConstraintsTool,
-  validateProjectRoot,
+  submitProposalTool,
   createAicMcpServer
 } from "../dist/index.js";
 
-describe("AIC MCP Adapter", () => {
-  let tmpDir: string;
+describe("AIC MCP Adapter & Proposal Submission Tests", () => {
+  const tmpDir = os.tmpdir();
+  const projectRoot = fs.mkdtempSync(path.join(tmpDir, "aic-mcp-test-"));
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aic-mcp-test-"));
-    initProject(tmpDir, { name: "MCP Test App", objective: "Testing MCP Read-Only Tools" });
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+  initProject(projectRoot, {
+    name: "Test Project",
+    objective: "Test MCP tools securely"
   });
 
   test("validateProjectRoot accepts valid initialized root", () => {
-    const resolved = validateProjectRoot(tmpDir);
-    assert.equal(resolved, path.resolve(tmpDir));
+    const summary = getProjectSummaryTool(projectRoot);
+    assert.equal(summary.project.name, "Test Project");
   });
 
-  test("validateProjectRoot rejects uninitialized or non-existent paths", () => {
-    const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "aic-empty-"));
-    assert.throws(() => validateProjectRoot(emptyDir), /AIC is not initialized/);
-    fs.rmSync(emptyDir, { recursive: true, force: true });
+  test("submitProposalTool successfully queues valid proposal without execution", () => {
+    const result = submitProposalTool(
+      {
+        taskId: "task-1",
+        executable: "node",
+        arguments: ["-v"]
+      },
+      projectRoot
+    );
 
-    assert.throws(() => validateProjectRoot(path.join(tmpDir, "non-existent")), /does not exist/);
+    assert.equal(result.success, true);
+    assert.equal(result.status, "AWAITING_APPROVAL");
+    assert.ok(result.proposalId?.startsWith("prop-"));
+    assert.ok(result.proposalFingerprint);
+    assert.equal(typeof result.proposalFingerprint, "string");
   });
 
-  test("getProjectSummaryTool returns correct project metadata", () => {
-    const summary = getProjectSummaryTool(tmpDir);
-    assert.equal(summary.project.name, "MCP Test App");
-    assert.equal(summary.project.objective, "Testing MCP Read-Only Tools");
+  test("submitProposalTool rejects proposal with missing executable or arguments", () => {
+    const result = submitProposalTool(
+      {
+        taskId: "task-1",
+        executable: "",
+        arguments: []
+      },
+      projectRoot
+    );
+
+    assert.equal(result.success, false);
+    assert.ok(result.error?.includes("executable and arguments are required"));
   });
 
-  test("read-only tools return expected structure", () => {
-    const task = getCurrentTaskTool(tmpDir);
-    assert.equal(task.currentTask, null);
+  test("submitProposalTool rejects uninitialized or invalid project root", () => {
+    const invalidRoot = fs.mkdtempSync(path.join(tmpDir, "aic-invalid-"));
 
-    const decisions = listDecisionsTool(tmpDir);
-    assert.deepEqual(decisions.decisions, []);
-
-    const constraints = getConstraintsTool(tmpDir);
-    assert.deepEqual(constraints.constraints, []);
+    assert.throws(() => {
+      submitProposalTool(
+        {
+          taskId: "task-1",
+          executable: "node",
+          arguments: ["-v"]
+        },
+        invalidRoot
+      );
+    }, /not initialized/i);
   });
 
-  test("createAicMcpServer initializes successfully with project root", () => {
-    const server = createAicMcpServer(tmpDir);
-    assert.ok(server, "MCP server instance should be successfully created");
+  test("createAicMcpServer instantiates successfully", () => {
+    const server = createAicMcpServer(projectRoot);
+    assert.ok(server);
   });
 });

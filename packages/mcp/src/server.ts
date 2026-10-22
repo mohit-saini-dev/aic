@@ -13,7 +13,8 @@ import {
   listIssuesTool,
   getConstraintsTool,
   getRelevantFilesTool,
-  compileContextTool
+  compileContextTool,
+  submitProposalTool
 } from "./tools.js";
 
 export function createAicMcpServer(projectRoot?: string) {
@@ -70,6 +71,23 @@ export function createAicMcpServer(projectRoot?: string) {
             maxCharacters: { type: "number", description: "Optional character budget limit" }
           }
         }
+      },
+      {
+        name: "aic_submit_proposal",
+        description: "Submit a structured execution proposal for operator review (does not execute)",
+        inputSchema: {
+          type: "object",
+          properties: {
+            taskId: { type: "string", description: "The task identifier" },
+            executable: { type: "string", description: "The executable command to propose" },
+            arguments: {
+              type: "array",
+              items: { type: "string" },
+              description: "Arguments for the executable"
+            }
+          },
+          required: ["taskId", "executable", "arguments"]
+        }
       }
     ]
   }));
@@ -95,6 +113,21 @@ export function createAicMcpServer(projectRoot?: string) {
           const maxChars = typeof args.maxCharacters === "number" ? args.maxCharacters : undefined;
           const compiled = await compileContextTool(projectRoot, maxChars);
           return { content: [{ type: "text", text: JSON.stringify(compiled, null, 2) }] };
+        }
+        case "aic_submit_proposal": {
+          const taskId = typeof args.taskId === "string" ? args.taskId : "";
+          const executable = typeof args.executable === "string" ? args.executable : "";
+          const argList = Array.isArray(args.arguments) ? (args.arguments as string[]) : [];
+
+          const result = submitProposalTool(
+            {
+              taskId,
+              executable,
+              arguments: argList
+            },
+            projectRoot
+          );
+          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
         }
         default:
           throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${request.params.name}`);
