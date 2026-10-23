@@ -28,6 +28,12 @@ import {
   compileContext
 } from "@aic/core";
 
+import {
+  listStoredProposals,
+  getStoredProposal,
+  updateProposalApproval
+} from "@aic/bridge";
+
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline/promises";
@@ -42,15 +48,15 @@ Usage:
   aic init [--name <name>] [--objective <objective>]
   aic status
   aic snapshot
-  aic context                                         Display raw project state JSON
-  aic context compile [options]                       Compile task-specific context
-    --include-memories                                Opt-in to include personal memories
-    --max-chars <number>                              Set context character budget limit
-    --out <file>                                      Save compiled context to a file
-  aic export [output-file]                            Export project context to JSON
-  aic inspect <context-package-file>                  Validate and summarize a context package
-  aic import <context-package-file>                   Import context into an empty AIC project
-  aic ingest <package-file> [--apply]                 Preview or apply secure context ingestion
+  aic context                                        Display raw project state JSON
+  aic context compile [options]                      Compile task-specific context
+    --include-memories                               Opt-in to include personal memories
+    --max-chars <number>                             Set context character budget limit
+    --out <file>                                     Save compiled context to a file
+  aic export [output-file]                           Export project context to JSON
+  aic inspect <context-package-file>                 Validate and summarize a context package
+  aic import <context-package-file>                  Import context into an empty AIC project
+  aic ingest <package-file> [--apply]                Preview or apply secure context ingestion
   aic project set [--name <name>] [--objective <objective>] [--status <status>]
   aic task set <title> [--status <status>]
   aic task clear
@@ -66,6 +72,7 @@ Usage:
   aic memory edit <id> [--content <text>] [--category <cat>] [--status <status>]
   aic memory archive <id>
   aic memory delete <id>
+  aic proposals [list|show|approve|reject] ...       Manage execution proposals
   aic help
 `);
 }
@@ -583,6 +590,82 @@ async function runMemory(args: string[]): Promise<void> {
   }
 }
 
+function runProposals(args: string[]): void {
+  const subcommand = args[0];
+  const subArgs = args.slice(1);
+  const root = process.cwd();
+
+  switch (subcommand) {
+    case "list":
+    case undefined: {
+      const proposals = listStoredProposals(root);
+      if (proposals.length === 0) {
+        console.log("No execution proposals found in store.");
+        return;
+      }
+      console.log(`Found ${proposals.length} execution proposal(s):`);
+      for (const p of proposals) {
+        console.log(`- [${p.proposalId}] Task: ${p.taskId} | Status: ${p.status} | Cmd: ${p.executable} ${p.arguments.join(" ")}`);
+        console.log(`  Fingerprint: ${p.fingerprint}`);
+      }
+      break;
+    }
+    case "show": {
+      const proposalId = subArgs[0];
+      if (!proposalId) {
+        throw new Error("Usage: aic proposals show <proposalId>");
+      }
+      const proposal = getStoredProposal(root, proposalId);
+      if (!proposal) {
+        console.log(`Proposal not found: ${proposalId}`);
+        process.exitCode = 1;
+        return;
+      }
+      console.log(JSON.stringify(proposal, null, 2));
+      break;
+    }
+    case "approve": {
+      const proposalId = subArgs[0];
+      let reason: string | undefined;
+      for (let i = 1; i < subArgs.length; i++) {
+        if (subArgs[i] === "--reason" && subArgs[i + 1]) {
+          reason = subArgs[i + 1];
+          i++;
+        }
+      }
+      if (!proposalId) {
+        throw new Error("Usage: aic proposals approve <proposalId> [--reason <text>]");
+      }
+      const updated = updateProposalApproval(root, proposalId, true, "operator", reason);
+      console.log(`✅ Proposal successfully approved and bound to fingerprint.`);
+      console.log(`Proposal ID: ${updated.proposalId}`);
+      console.log(`Workflow State: ${updated.workflowState}`);
+      console.log(`Approval ID: ${updated.approval?.approvalId}`);
+      break;
+    }
+    case "reject": {
+      const proposalId = subArgs[0];
+      let reason: string | undefined;
+      for (let i = 1; i < subArgs.length; i++) {
+        if (subArgs[i] === "--reason" && subArgs[i + 1]) {
+          reason = subArgs[i + 1];
+          i++;
+        }
+      }
+      if (!proposalId) {
+        throw new Error("Usage: aic proposals reject <proposalId> [--reason <text>]");
+      }
+      const updated = updateProposalApproval(root, proposalId, false, "operator", reason);
+      console.log(`❌ Proposal rejected.`);
+      console.log(`Proposal ID: ${updated.proposalId}`);
+      console.log(`Workflow State: ${updated.workflowState}`);
+      break;
+    }
+    default:
+      throw new Error("Usage: aic proposals [list|show|approve|reject] ...");
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -636,6 +719,9 @@ async function main(): Promise<void> {
         break;
       case "memory":
         await runMemory(args.slice(1));
+        break;
+      case "proposals":
+        runProposals(args.slice(1));
         break;
       case "help":
       case "--help":

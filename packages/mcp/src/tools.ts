@@ -1,5 +1,5 @@
 import { readState, compileContext } from "@aic/core";
-import { computeProposalFingerprint } from "@aic/bridge";
+import { saveProposal } from "@aic/bridge";
 import type { ExecutionProposal } from "@aic/bridge";
 import { validateProjectRoot } from "./security.js";
 
@@ -71,21 +71,24 @@ export function submitProposalTool(
     };
   }
 
-  const proposal: ExecutionProposal = {
-    proposalId: `prop-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    ...proposalInput,
-    workingDirectory: root,
-    status: "AWAITING_APPROVAL",
-    createdAt: new Date().toISOString()
-  };
+  try {
+    const summary = saveProposal(root, {
+      taskId: proposalInput.taskId,
+      executable: proposalInput.executable,
+      arguments: proposalInput.arguments
+    });
 
-  const fingerprint = computeProposalFingerprint(proposal);
-
-  return {
-    success: true,
-    message: "Proposal submitted successfully and queued for operator review.",
-    proposalId: proposal.proposalId,
-    proposalFingerprint: fingerprint,
-    status: proposal.status
-  };
+    return {
+      success: true,
+      message: "Proposal submitted successfully, durably persisted, and queued for operator review.",
+      proposalId: summary.proposalId,
+      proposalFingerprint: summary.fingerprint,
+      status: summary.status
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: `Failed to persist proposal: ${err.message}`
+    };
+  }
 }
