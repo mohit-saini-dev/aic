@@ -1,15 +1,15 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import os from "node:os";
-import type { 
-  ExecutionProposal, 
-  ApprovalDecision 
+import type {
+  ExecutionProposal,
+  ApprovalDecision
 } from "../dist/index.js";
-import { 
-  validateProposalPolicy, 
-  DEFAULT_EXECUTION_POLICY, 
-  validateApprovalBinding, 
-  computeProposalFingerprint 
+import {
+  validateProposalPolicy,
+  DEFAULT_EXECUTION_POLICY,
+  validateApprovalBinding,
+  computeProposalFingerprint
 } from "../dist/index.js";
 
 describe("Bridge Policy Validation & Approval Binding", () => {

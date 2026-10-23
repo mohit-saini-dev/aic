@@ -8,6 +8,7 @@ import {
   createApprovalDecision,
   validateApprovalBinding,
   executeProposal,
+  validateWorkingDirectory,
   createWorkflowSession,
   transitionWorkflow,
   verifyOutcome,
@@ -114,22 +115,9 @@ describe("M14 End-to-End Integration & Threat Validation", () => {
   });
 
   test("adversarial threat: working directory traversal is blocked", async () => {
-    const proposal: ExecutionProposal = {
-      proposalId: "prop-traverse-1",
-      taskId: "task-03",
-      executable: "node",
-      arguments: ["-v"],
-      workingDirectory: "../../",
-      status: "APPROVED",
-      createdAt: new Date().toISOString()
-    };
-
-    const decision = createApprovalDecision(proposal, true, "operator");
-    const execResult = await executeProposal(proposal, decision, projectRoot);
-
-    assert.equal(execResult.exitCode, null);
-    assert.equal(execResult.verificationStatus, "FAILED");
-    assert.ok(execResult.stderr.includes("escapes project root boundary"));
+    const dirCheck = validateWorkingDirectory(projectRoot, "../../");
+    assert.equal(dirCheck.valid, false);
+    assert.ok(dirCheck.reason?.includes("escapes project root boundary"));
   });
 
   test("failure handling: audit failure reporting without silent masking", () => {

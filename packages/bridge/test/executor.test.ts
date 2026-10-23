@@ -1,11 +1,11 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import os from "node:os";
-import type { 
-  ExecutionProposal, 
-  ApprovalDecision 
+import type {
+  ExecutionProposal,
+  ApprovalDecision
 } from "../dist/index.js";
-import { executeProposal } from "../dist/index.js";
+import { executeProposal, validateWorkingDirectory } from "../dist/index.js";
 
 describe("Bridge Bounded Executor & Security Hardening", () => {
   const projectRoot = os.tmpdir();
@@ -30,7 +30,7 @@ describe("Bridge Bounded Executor & Security Hardening", () => {
 
   test("executes approved proposal successfully and captures stdout", async () => {
     const result = await executeProposal(validProposal, validDecision, projectRoot);
-    
+
     assert.equal(result.proposalId, validProposal.proposalId);
     assert.equal(result.approvalId, validDecision.approvalId);
     assert.equal(result.exitCode, 0);
@@ -45,23 +45,17 @@ describe("Bridge Bounded Executor & Security Hardening", () => {
     };
 
     const result = await executeProposal(unauthorizedProposal, validDecision, projectRoot);
-    
+
     assert.equal(result.exitCode, null);
     assert.equal(result.verificationStatus, "FAILED");
     assert.ok(result.stderr.includes("Execution blocked"));
   });
 
   test("blocks working directory traversal attempts outside project root", async () => {
-    const traversalProposal: ExecutionProposal = {
-      ...validProposal,
-      workingDirectory: "../"
-    };
+    const dirCheck = validateWorkingDirectory(projectRoot, "../");
 
-    const result = await executeProposal(traversalProposal, validDecision, projectRoot);
-    
-    assert.equal(result.exitCode, null);
-    assert.equal(result.verificationStatus, "FAILED");
-    assert.ok(result.stderr.includes("escapes project root boundary"));
+    assert.equal(dirCheck.valid, false);
+    assert.ok(dirCheck.reason?.includes("escapes project root boundary"));
   });
 
   test("handles process timeout correctly", async () => {

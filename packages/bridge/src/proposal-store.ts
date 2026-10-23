@@ -20,7 +20,7 @@ interface StoredProposal {
   proposal: ExecutionProposal;
   fingerprint: string;
   workflowSession: WorkflowSession;
-  approval?: ApprovalDecision;
+  approval?: ApprovalDecision & { approvalFingerprint?: string };
   approvalFingerprint?: string;
   updatedAt: string;
 }
@@ -41,7 +41,7 @@ export interface ProposalSummary {
   createdAt: string;
   updatedAt: string;
   workflowState: WorkflowSession["currentState"];
-  approval?: ApprovalDecision;
+  approval?: ApprovalDecision & { approvalFingerprint?: string };
   approvalFingerprint?: string;
 }
 
@@ -372,18 +372,19 @@ export function updateProposalApproval(
   return withStoreLock(projectRoot, (storePath) => {
     const store = readStore(storePath);
     const record = store.proposals.find((p) => p.proposal.proposalId === proposalId);
-    
+
     if (!record) {
       throw new Error(`Proposal not found: ${proposalId}`);
     }
 
-    const decision: ApprovalDecision = {
+    const decision: ApprovalDecision & { approvalFingerprint?: string } = {
       approvalId: `approval-${crypto.randomUUID()}`,
       proposalId,
       approved,
       decidedBy,
       decidedAt: new Date().toISOString(),
-      reason
+      reason,
+      approvalFingerprint: record.fingerprint
     };
 
     record.approval = decision;
@@ -395,7 +396,7 @@ export function updateProposalApproval(
     if (!transition.success) {
       throw new Error(transition.error ?? `Invalid workflow transition to ${targetState}`);
     }
-    
+
     record.workflowSession = transition.session;
     record.updatedAt = new Date().toISOString();
 

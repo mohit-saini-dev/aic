@@ -1,10 +1,10 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import type { ExecutionProposal } from "../dist/index.js";
-import { 
-  createWorkflowSession, 
-  transitionWorkflow, 
-  verifyWorkflowBinding 
+import {
+  createWorkflowSession,
+  transitionWorkflow,
+  verifyWorkflowBinding
 } from "../dist/index.js";
 
 describe("M13.1 Workflow State Machine & Contracts", () => {

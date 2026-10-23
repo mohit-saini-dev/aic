@@ -55,7 +55,7 @@ export function createAuditEvent(
 function sanitizePayload(payload: Record<string, unknown>): Record<string, unknown> {
   const sanitized: Record<string, unknown> = {};
   const sensitiveKeys = ["password", "secret", "token", "apikey", "credential"];
-  
+
   for (const [key, value] of Object.entries(payload)) {
     const lowerKey = key.toLowerCase();
     if (sensitiveKeys.some((s) => lowerKey.includes(s))) {

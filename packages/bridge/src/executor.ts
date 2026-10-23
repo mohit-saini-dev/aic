@@ -42,28 +42,79 @@ function sanitizeEnvironment(allowlist: string[]): Record<string, string> {
 }
 
 /**
- * Validates and canonicalizes the working directory, ensuring no traversal outside projectRoot.
+ * Validates and canonicalizes the working directory.
+ * Rejects paths whose real filesystem location escapes projectRoot.
  */
-export function validateWorkingDirectory(projectRoot: string, workingDirectory: string): { valid: boolean; resolvedPath?: string; reason?: string } {
-  const absRoot = path.resolve(projectRoot);
-  const absTarget = path.resolve(absRoot, workingDirectory);
-
-  const relative = path.relative(absRoot, absTarget);
-  const isOutside = relative.startsWith("..") || path.isAbsolute(relative);
-
-  if (isOutside) {
-    return { valid: false, reason: `Working directory escapes project root boundary: ${absTarget}` };
-  }
-
+export function validateWorkingDirectory(
+  projectRoot: string,
+  workingDirectory: string
+): { valid: boolean; resolvedPath?: string; reason?: string } {
   try {
-    if (!fs.existsSync(absTarget) || !fs.statSync(absTarget).isDirectory()) {
-      return { valid: false, reason: `Working directory does not exist or is not a directory: ${absTarget}` };
+    const absRoot = path.resolve(projectRoot);
+    if (!fs.existsSync(absRoot)) {
+      return { valid: false, reason: `Project root does not exist: ${absRoot}` };
     }
-  } catch (err: any) {
-    return { valid: false, reason: `Failed to access working directory: ${err.message}` };
-  }
+    const realRoot = fs.realpathSync(absRoot);
 
-  return { valid: true, resolvedPath: absTarget };
+    // Resolve candidate path against the real root
+    const candidate = path.resolve(realRoot, workingDirectory);
+
+    // Lexically check containment first so traversal attempts are caught immediately
+    const relativeBefore = path.relative(realRoot, candidate);
+    const isOutsideBefore =
+      relativeBefore === ".." ||
+      relativeBefore.startsWith(`..${path.sep}`) ||
+      relativeBefore.startsWith("..\\") ||
+      relativeBefore.startsWith("../") ||
+      path.isAbsolute(relativeBefore);
+
+    if (isOutsideBefore) {
+      return {
+        valid: false,
+        reason: `Working directory escapes project root boundary: ${candidate}`
+      };
+    }
+
+    if (!fs.existsSync(candidate)) {
+      return {
+        valid: false,
+        reason: `Working directory does not exist or is not accessible: ${candidate}`
+      };
+    }
+
+    // realpathSync resolves directory symlinks to their actual targets
+    const realTarget = fs.realpathSync(candidate);
+    const relative = path.relative(realRoot, realTarget);
+    const isOutside =
+      relative === ".." ||
+      relative.startsWith(`..${path.sep}`) ||
+      relative.startsWith("..\\") ||
+      relative.startsWith("../") ||
+      path.isAbsolute(relative);
+
+    if (isOutside) {
+      return {
+        valid: false,
+        reason: `Working directory escapes project root boundary: ${realTarget}`
+      };
+    }
+
+    if (!fs.statSync(realTarget).isDirectory()) {
+      return {
+        valid: false,
+        reason: `Working directory is not a directory: ${realTarget}`
+      };
+    }
+
+    return { valid: true, resolvedPath: realTarget };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+
+    return {
+      valid: false,
+      reason: `Failed to resolve or access working directory: ${message}`
+    };
+  }
 }
 
 /**

@@ -1,4 +1,5 @@
 import path from "node:path";
+import fs from "node:fs";
 import { ExecutionProposal } from "./types.js";
 
 export interface ExecutionPolicy {
@@ -62,16 +63,43 @@ export function validateProposalPolicy(
     }
   }
 
-  // Rule 3: Enforce working directory constraints (must be within or equal to projectRoot)
+  // Rule 3: Enforce working directory constraints using canonical paths.
   if (policy.requireWithinProjectRoot) {
-    const resolvedProjectRoot = path.resolve(projectRoot);
-    const resolvedWorkingDir = path.resolve(proposal.workingDirectory);
-    
-    const relative = path.relative(resolvedProjectRoot, resolvedWorkingDir);
-    if (relative.startsWith("..") && path.isAbsolute(relative)) {
+    try {
+      const resolvedProjectRoot = fs.realpathSync(path.resolve(projectRoot));
+      const candidate = path.resolve(
+        resolvedProjectRoot,
+        proposal.workingDirectory
+      );
+      const resolvedWorkingDir = fs.realpathSync(candidate);
+
+      const relative = path.relative(
+        resolvedProjectRoot,
+        resolvedWorkingDir
+      );
+
+      const isOutside =
+        relative === ".." ||
+        relative.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relative);
+
+      if (isOutside) {
+        return {
+          allowed: false,
+          reason: `Working directory '${proposal.workingDirectory}' escapes project root.`
+        };
+      }
+
+      if (!fs.statSync(resolvedWorkingDir).isDirectory()) {
+        return {
+          allowed: false,
+          reason: `Working directory '${proposal.workingDirectory}' is not a directory.`
+        };
+      }
+    } catch {
       return {
         allowed: false,
-        reason: `Working directory '${proposal.workingDirectory}' escapes project root.`
+        reason: `Working directory '${proposal.workingDirectory}' could not be resolved or accessed safely.`
       };
     }
   }
