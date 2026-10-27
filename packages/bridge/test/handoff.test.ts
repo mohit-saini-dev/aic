@@ -1,24 +1,32 @@
+
 import { test, describe, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { initProject } from "@aic/core";
-import { generateAgentHandoff, renderAgentPrompt, computeHandoffFingerprint } from "../dist/index.js";
+import {
+  generateAgentHandoff,
+  renderAgentPrompt,
+  computeHandoffFingerprint
+} from "../dist/index.js";
 
 describe("Bridge Task Handoff & Prompt Generation", () => {
   let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aic-handoff-test-"));
-    initProject(tmpDir, { name: "Handoff Test Project", objective: "Testing M12.2 Handoffs" });
+    initProject(tmpDir, {
+      name: "Handoff Test Project",
+      objective: "Testing M12.2 Handoffs"
+    });
   });
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test("generates schema-valid handoff and preserves provenance", () => {
+  test("generates schema-valid handoff and preserves provenance", async () => {
     const task = {
       taskId: "task-001",
       title: "Fix Bug",
@@ -27,15 +35,16 @@ describe("Bridge Task Handoff & Prompt Generation", () => {
       relevantFiles: ["src/parser.ts"]
     };
 
-    const handoff = generateAgentHandoff(tmpDir, task);
+    const handoff = await generateAgentHandoff(tmpDir, task);
 
     assert.equal(handoff.schemaVersion, "1.0");
     assert.equal(handoff.task.taskId, "task-001");
     assert.equal(handoff.provenance.compilerVersion, "0.1.0");
     assert.ok(handoff.fingerprint);
+    assert.equal(handoff.compiledContext.format, "aic-compiled-context");
   });
 
-  test("produces identical fingerprints for equivalent canonical inputs", () => {
+  test("produces identical fingerprints for equivalent canonical inputs", async () => {
     const task = {
       taskId: "task-002",
       title: "Refactor",
@@ -44,11 +53,12 @@ describe("Bridge Task Handoff & Prompt Generation", () => {
       relevantFiles: ["src/index.ts"]
     };
 
-    const handoff1 = generateAgentHandoff(tmpDir, task);
-    const handoff2 = generateAgentHandoff(tmpDir, task);
+    const handoff1 = await generateAgentHandoff(tmpDir, task);
+    const handoff2 = await generateAgentHandoff(tmpDir, task);
 
     const base1 = { ...handoff1 };
     const base2 = { ...handoff2 };
+
     delete (base1 as any).fingerprint;
     delete (base1 as any).handoffId;
     delete (base1 as any).provenance.compiledAt;
@@ -57,16 +67,20 @@ describe("Bridge Task Handoff & Prompt Generation", () => {
     delete (base2 as any).handoffId;
     delete (base2 as any).provenance.compiledAt;
 
-    assert.equal(computeHandoffFingerprint(base1), computeHandoffFingerprint(base2));
+    assert.equal(
+      computeHandoffFingerprint(base1),
+      computeHandoffFingerprint(base2)
+    );
   });
 
-  test("rejects malformed task input", () => {
-    assert.throws(() => {
-      generateAgentHandoff(tmpDir, {} as any);
-    }, /Invalid task input/);
+  test("rejects malformed task input", async () => {
+    await assert.rejects(
+      generateAgentHandoff(tmpDir, {} as any),
+      /Invalid task input/
+    );
   });
 
-  test("renders prompt correctly with constraints and fingerprint", () => {
+  test("renders prompt correctly with constraints and fingerprint", async () => {
     const task = {
       taskId: "task-003",
       title: "Feature",
@@ -75,7 +89,7 @@ describe("Bridge Task Handoff & Prompt Generation", () => {
       relevantFiles: ["src/logger.ts"]
     };
 
-    const handoff = generateAgentHandoff(tmpDir, task);
+    const handoff = await generateAgentHandoff(tmpDir, task);
     const prompt = renderAgentPrompt(handoff);
 
     assert.ok(prompt.includes("Add logging."));

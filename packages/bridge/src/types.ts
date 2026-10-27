@@ -1,4 +1,14 @@
-export type ProposalStatus = "PROPOSED" | "VALIDATED" | "AWAITING_APPROVAL" | "APPROVED" | "REJECTED" | "EXECUTED" | "FAILED";
+
+import type { CompiledContext } from "@aic/core";
+
+export type ProposalStatus =
+  | "PROPOSED"
+  | "VALIDATED"
+  | "AWAITING_APPROVAL"
+  | "APPROVED"
+  | "REJECTED"
+  | "EXECUTED"
+  | "FAILED";
 
 export interface AgentTask {
   taskId: string;
@@ -7,6 +17,30 @@ export interface AgentTask {
   constraints: string[];
   relevantFiles: string[];
   contextFingerprint?: string;
+}
+
+export interface HandoffOptions {
+  includeMemories?: boolean;
+  maxCharacters?: number;
+}
+
+export interface AgentHandoff {
+  schemaVersion: "1.0";
+  handoffId: string;
+  task: {
+    taskId: string;
+    title?: string;
+    objective: string;
+    constraints: string[];
+    relevantFiles: string[];
+  };
+  compiledContext: CompiledContext;
+  provenance: {
+    projectRoot: string;
+    compilerVersion: string;
+    compiledAt: string;
+  };
+  fingerprint: string;
 }
 
 export interface ExecutionProposal {
@@ -25,6 +59,7 @@ export interface ApprovalDecision {
   approved: boolean;
   decidedBy: string;
   decidedAt: string;
+  approvalFingerprint: string;
   reason?: string;
 }
 
@@ -39,22 +74,4 @@ export interface ExecutionResult {
   changedFiles: string[];
   diffSummary: string;
   verificationStatus: "PASSED" | "FAILED" | "INCOMPLETE" | "NOT_RUN";
-}
-
-export interface AgentHandoff {
-  schemaVersion: "1.0";
-  handoffId: string;
-  task: AgentTask;
-  compiledContext: unknown;
-  provenance: {
-    projectRoot: string;
-    compilerVersion: string;
-    compiledAt: string;
-  };
-  fingerprint: string;
-}
-
-export interface HandoffOptions {
-  includeMemories?: boolean;
-  maxCharacters?: number;
 }

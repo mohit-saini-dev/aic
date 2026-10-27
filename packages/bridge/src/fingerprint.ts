@@ -1,29 +1,38 @@
+
 import crypto from "node:crypto";
-import { AgentHandoff } from "./types.js";
+import type { AgentHandoff } from "./types.js";
 
 /**
  * Computes a stable SHA-256 fingerprint for canonical handoff content.
- * Excludes the fingerprint property itself to ensure determinism.
+ * Excludes generated identifiers and timestamps that do not represent
+ * changes to the underlying task or compiled project context.
  */
 export function computeHandoffFingerprint(
   handoff: Omit<AgentHandoff, "fingerprint">
 ): string {
+  const {
+    createdAt: _createdAt,
+    ...stableCompiledContext
+  } = handoff.compiledContext;
+
   const canonicalObject = {
     schemaVersion: handoff.schemaVersion,
     task: {
       taskId: handoff.task.taskId,
-      title: handoff.task.title,
+      title: handoff.task.title ?? null,
       objective: handoff.task.objective,
       constraints: [...handoff.task.constraints].sort(),
       relevantFiles: [...handoff.task.relevantFiles].sort()
     },
-    compiledContext: handoff.compiledContext,
+    compiledContext: stableCompiledContext,
     provenance: {
       projectRoot: handoff.provenance.projectRoot,
       compilerVersion: handoff.provenance.compilerVersion
     }
   };
 
-  const jsonString = JSON.stringify(canonicalObject);
-  return crypto.createHash("sha256").update(jsonString).digest("hex");
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(canonicalObject))
+    .digest("hex");
 }

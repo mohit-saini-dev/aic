@@ -1,30 +1,28 @@
+
 import path from "node:path";
 import { compileContext } from "@aic/core";
-import { AgentTask, AgentHandoff, HandoffOptions } from "./types.js";
+import type { AgentTask, AgentHandoff, HandoffOptions } from "./types.js";
 import { computeHandoffFingerprint } from "./fingerprint.js";
 
-export function generateAgentHandoff(
+export async function generateAgentHandoff(
   projectRoot: string,
   task: AgentTask,
   options: HandoffOptions = {}
-): AgentHandoff {
+): Promise<AgentHandoff> {
   if (!task || !task.taskId || !task.objective) {
     throw new Error("Invalid task input: taskId and objective are required.");
   }
 
-  // Compile context using M9 compiler (privacy by default: memories excluded unless opted in)
-  const compiledContext = compileContext(projectRoot, {
+  const compiledContext = await compileContext(projectRoot, {
     includeMemories: options.includeMemories ?? false,
     maxCharacters: options.maxCharacters ?? 10000
   });
 
   const resolvedRoot = path.resolve(projectRoot);
-  const handoffId = `handoff-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-  const compiledAt = new Date().toISOString();
 
   const partialHandoff: Omit<AgentHandoff, "fingerprint"> = {
     schemaVersion: "1.0",
-    handoffId,
+    handoffId: `handoff-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     task: {
       taskId: task.taskId,
       title: task.title,
@@ -36,7 +34,7 @@ export function generateAgentHandoff(
     provenance: {
       projectRoot: resolvedRoot,
       compilerVersion: "0.1.0",
-      compiledAt
+      compiledAt: new Date().toISOString()
     }
   };
 

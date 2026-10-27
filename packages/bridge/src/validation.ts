@@ -1,12 +1,16 @@
-import crypto from "node:crypto";
-import { ExecutionProposal, ApprovalDecision } from "./types.js";
-import { ExecutionPolicy, DEFAULT_EXECUTION_POLICY, validateProposalPolicy } from "./policy.js";
 
-/**
- * Generates a cryptographic content hash for a proposal to ensure
- * that changing any parameter (executable, args, workdir) invalidates any approval.
- */
-export function computeProposalFingerprint(proposal: ExecutionProposal): string {
+import crypto from "node:crypto";
+
+import type { ExecutionProposal, ApprovalDecision } from "./types.js";
+import {
+  ExecutionPolicy,
+  DEFAULT_EXECUTION_POLICY,
+  validateProposalPolicy
+} from "./policy.js";
+
+export function computeProposalFingerprint(
+  proposal: ExecutionProposal
+): string {
   const canonical = {
     proposalId: proposal.proposalId,
     taskId: proposal.taskId,
@@ -14,7 +18,11 @@ export function computeProposalFingerprint(proposal: ExecutionProposal): string 
     arguments: proposal.arguments,
     workingDirectory: proposal.workingDirectory
   };
-  return crypto.createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(canonical))
+    .digest("hex");
 }
 
 export interface BindingValidationResult {
@@ -22,41 +30,98 @@ export interface BindingValidationResult {
   reason?: string;
 }
 
-/**
- * Ensures that an approval decision is strictly bound to the exact proposal content,
- * has not expired or been tampered with, and passes current policy validation.
- */
 export function validateApprovalBinding(
   proposal: ExecutionProposal,
-  decision: ApprovalDecision & { approvalFingerprint?: string },
+  decision: ApprovalDecision,
   projectRoot: string,
   policy: ExecutionPolicy = DEFAULT_EXECUTION_POLICY
 ): BindingValidationResult {
-  // Rule 1: No approval, no execution
-  if (!decision || !decision.approved) {
-    return { valid: false, reason: "Proposal has not been approved." };
+  if (
+    !decision ||
+    typeof decision !== "object"
+  ) {
+    return {
+      valid: false,
+      reason: "Approval decision is missing or invalid."
+    };
   }
 
-  // Rule 2: Approval applies to one exact proposal ID
+  if (decision.approved !== true) {
+    return {
+      valid: false,
+      reason: "Proposal has not been approved."
+    };
+  }
+
+  if (
+    typeof decision.approvalId !== "string" ||
+    decision.approvalId.trim().length === 0
+  ) {
+    return {
+      valid: false,
+      reason: "Approval ID is missing or invalid."
+    };
+  }
+
+  if (
+    typeof decision.decidedBy !== "string" ||
+    decision.decidedBy.trim().length === 0
+  ) {
+    return {
+      valid: false,
+      reason: "Approver identity is missing or invalid."
+    };
+  }
+
+  if (
+    typeof decision.decidedAt !== "string" ||
+    decision.decidedAt.trim().length === 0 ||
+    !Number.isFinite(Date.parse(decision.decidedAt))
+  ) {
+    return {
+      valid: false,
+      reason: "Approval timestamp is missing or invalid."
+    };
+  }
+
   if (decision.proposalId !== proposal.proposalId) {
-    return { valid: false, reason: "Approval proposalId mismatch." };
+    return {
+      valid: false,
+      reason: "Approval proposalId mismatch."
+    };
   }
 
-  // Rule 3: Cryptographic binding - verify that proposal content has not changed since approval
-  if (decision.approvalFingerprint) {
-    const currentFingerprint = computeProposalFingerprint(proposal);
-    if (decision.approvalFingerprint !== currentFingerprint) {
-      return {
-        valid: false,
-        reason: "Proposal content has been modified since approval (fingerprint mismatch)."
-      };
-    }
+  if (
+    typeof decision.approvalFingerprint !== "string" ||
+    !/^[a-f0-9]{64}$/.test(decision.approvalFingerprint)
+  ) {
+    return {
+      valid: false,
+      reason: "Approval fingerprint is missing or invalid."
+    };
   }
 
-  // Revalidate policy immediately before execution (Rule 5)
-  const policyCheck = validateProposalPolicy(proposal, projectRoot, policy);
+  const currentFingerprint = computeProposalFingerprint(proposal);
+
+  if (decision.approvalFingerprint !== currentFingerprint) {
+    return {
+      valid: false,
+      reason:
+        "Proposal content has been modified since approval (fingerprint mismatch)."
+    };
+  }
+
+  const policyCheck = validateProposalPolicy(
+    proposal,
+    projectRoot,
+    policy
+  );
+
   if (!policyCheck.allowed) {
-    return { valid: false, reason: `Policy validation failed: ${policyCheck.reason}` };
+    return {
+      valid: false,
+      reason: `Policy validation failed: ${policyCheck.reason}`
+    };
   }
 
   return { valid: true };
