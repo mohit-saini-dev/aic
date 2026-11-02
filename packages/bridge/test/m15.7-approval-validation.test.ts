@@ -1,4 +1,3 @@
-
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -8,7 +7,8 @@ import path from "node:path";
 import {
   saveProposal,
   updateProposalApproval,
-  listStoredProposals
+  listStoredProposals,
+  transitionProposalWorkflow
 } from "../dist/index.js";
 
 function createTestProject(): string {
@@ -372,6 +372,75 @@ describe("M15.7 proposal approval validation", () => {
 
       const proposal = createPendingProposal(root);
       assert.equal(proposal.status, "AWAITING_APPROVAL");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("aborts an approved proposal and preserves its approval", () => {
+    const root = createTestProject();
+
+    try {
+      const proposal = createPendingProposal(root);
+
+      const approved = updateProposalApproval(
+        root,
+        proposal.proposalId,
+        true,
+        "test-operator",
+        "Approved for execution"
+      );
+
+      const aborted = transitionProposalWorkflow(
+        root,
+        proposal.proposalId,
+        "ABORTED",
+        "Execution cancelled"
+      );
+
+      assert.equal(aborted.status, "FAILED");
+      assert.equal(aborted.workflowState, "ABORTED");
+
+      assert.equal(aborted.approval?.approved, true);
+      assert.equal(
+        aborted.approval?.approvalFingerprint,
+        approved.approval?.approvalFingerprint
+      );
+
+      const stored = listStoredProposals(root);
+
+      assert.equal(stored.length, 1);
+      assert.equal(stored[0].status, "FAILED");
+      assert.equal(stored[0].workflowState, "ABORTED");
+      assert.equal(stored[0].approval?.approved, true);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("aborts a pending proposal without creating an approval", () => {
+    const root = createTestProject();
+
+    try {
+      const proposal = createPendingProposal(root);
+
+      const aborted = transitionProposalWorkflow(
+        root,
+        proposal.proposalId,
+        "ABORTED",
+        "Cancelled before approval"
+      );
+
+      assert.equal(aborted.status, "FAILED");
+      assert.equal(aborted.workflowState, "ABORTED");
+      assert.equal(aborted.approval, undefined);
+
+      const stored = listStoredProposals(root);
+
+      assert.equal(stored.length, 1);
+      assert.equal(stored[0].status, "FAILED");
+      assert.equal(stored[0].workflowState, "ABORTED");
+      assert.equal(stored[0].approval, undefined);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

@@ -182,7 +182,11 @@ function validateProposalWorkflowBinding(
       return workflowSession.currentState === "PROPOSED";
 
     case "APPROVED":
-      return workflowSession.currentState === "APPROVED";
+      return (
+        workflowSession.currentState === "APPROVED" ||
+        workflowSession.currentState === "EXECUTING" ||
+        workflowSession.currentState === "VERIFYING"
+      );
 
     case "REJECTED":
       return workflowSession.currentState === "REJECTED";
@@ -694,6 +698,102 @@ export function getStoredProposal(
   proposalId: string
 ): ProposalSummary | undefined {
   return getProposal(projectRoot, proposalId);
+}
+
+/**
+ * Persist a legal workflow transition under the proposal-store lock.
+ *
+ * The proposal fingerprint and approval record are left unchanged.
+ * Intermediate execution states keep the proposal status APPROVED.
+ * Aborted workflows change the proposal status to FAILED.
+ */
+export function transitionProposalWorkflow(
+  projectRoot: string,
+  proposalId: string,
+  nextState: WorkflowSession["currentState"],
+  message?: string
+): ProposalSummary {
+  const paths = getStorePaths(projectRoot);
+  const lockDescriptor = acquireLock(paths.lockPath);
+
+  try {
+    const store = readStore(paths.storePath);
+
+    const record = store.proposals.find(
+      (item) => item.proposal.proposalId === proposalId
+    );
+
+    if (!record) {
+      throw new Error(`Proposal ${proposalId} was not found.`);
+    }
+
+    const currentFingerprint = computeProposalFingerprint(
+      record.proposal
+    );
+
+    if (
+      record.fingerprint !== currentFingerprint ||
+      record.workflowSession.proposalFingerprint !== currentFingerprint
+    ) {
+      throw new Error(
+        `Proposal fingerprint mismatch for ${proposalId}.`
+      );
+    }
+
+    if (
+      record.proposal.status === "REJECTED" ||
+      record.proposal.status === "EXECUTED" ||
+      record.proposal.status === "FAILED"
+    ) {
+      throw new Error(
+        `Cannot transition workflow for proposal in status ${record.proposal.status}.`
+      );
+    }
+
+    if (
+      record.proposal.status !== "APPROVED" &&
+      nextState !== "ABORTED"
+    ) {
+      throw new Error(
+        "Workflow execution transitions require an approved proposal."
+      );
+    }
+
+    const transition = transitionWorkflow(
+      record.workflowSession,
+      nextState,
+      message
+    );
+
+    if (!transition.success) {
+      throw new Error(
+        transition.error ?? "Invalid workflow transition."
+      );
+    }
+
+    record.workflowSession = transition.session;
+
+    if (nextState === "ABORTED") {
+      record.proposal = {
+        ...record.proposal,
+        status: "FAILED"
+      };
+    }
+
+    record.updatedAt = transition.session.updatedAt;
+
+    if (!validateStoredProposal(record)) {
+      throw new Error(
+        "Workflow transition would make the stored proposal invalid."
+      );
+    }
+
+    writeStore(paths.storePath, store);
+
+    return toSummary(record);
+  } finally {
+    releaseLock(paths.lockPath, lockDescriptor);
+  }
 }
 
 export function updateProposalApproval(

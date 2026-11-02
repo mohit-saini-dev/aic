@@ -1,3 +1,4 @@
+
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -36,7 +37,7 @@ describe("AIC MCP Adapter & Proposal Submission Tests", () => {
 
     assert.equal(result.success, true);
     assert.equal(result.status, "AWAITING_APPROVAL");
-    assert.ok(result.proposalId?.startsWith("prop-"));
+    assert.ok(result.proposalId?.startsWith("proposal-"));
     assert.ok(result.proposalFingerprint);
     assert.equal(typeof result.proposalFingerprint, "string");
   });
